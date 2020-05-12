@@ -93,7 +93,7 @@ class Classifier(nn.Module):
             self.classifier = nn.Linear(bottleneck_dim, self.output_dim)
 
             # Initialize weights
-            #self.apply(weight_init_fn)
+            self.apply(weight_init_fn)
         elif name == 'mnist_base':
             self.input_dim = 784
             self.output_dim = 10
@@ -107,7 +107,7 @@ class Classifier(nn.Module):
             self.classifier = nn.Linear(1024, self.output_dim)
 
             # Weight initialization
-            #self.apply(weight_init_fn)
+            self.apply(weight_init_fn)
         else:
             raise NotImplementedError('Unknown dataset name passed.')
 
