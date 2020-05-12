@@ -132,7 +132,7 @@ def run(args):
         best_val_error = None
 
     epochs_phase_one = 20
-    epochs_phase_two = 20
+    epochs_phase_two = 40
 
     while epoch < total_epochs:
         i = 1
