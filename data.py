@@ -24,19 +24,23 @@ def get_dataset(dataset_name):
         #x_train = x_train[perm_index]
         #y_train = y_train[perm_index]
 
+
         x_valid = torch.tensor(x_train[50000:], dtype=torch.float32)
         y_valid = torch.tensor(y_train[50000:], dtype=torch.int64)
         x_train = torch.tensor(x_train[:50000], dtype=torch.float32)
         y_train = torch.tensor(y_train[:50000], dtype=torch.int64)
-
-        train_set = torch.utils.data.TensorDataset(x_train, y_train)
-        valid_set = torch.utils.data.TensorDataset(x_valid, y_valid)
 
         x_test = test_set.data.numpy()
         x_test = np.reshape(x_test, [x_test.shape[0], -1])
         x_test = torch.tensor(x_test)
         y_test = test_set.targets
 
+        x_valid = (x_valid/255.0)*2 - 1
+        x_train = (x_train/255.0)*2 - 1
+        x_test = (x_test/255.0)*2 - 1
+
+        train_set = torch.utils.data.TensorDataset(x_train, y_train)
+        valid_set = torch.utils.data.TensorDataset(x_valid, y_valid)
         test_set = torch.utils.data.TensorDataset(x_test, y_test)
 
         dataset = {'train' : train_set,
