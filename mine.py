@@ -8,6 +8,7 @@ class MINE:
     """ Mutual Information Neural Estimator class  """
     def __init__(self,
                  statistics_network,
+                 criterion,
                  ema_decay):
         """ Initialize MINE object
 
@@ -15,8 +16,10 @@ class MINE:
             statistics_network (nn.Module): neural network f(x, z) -> R
             ema_decay (float): decay rate for exponential moving average
         """
+        assert criterion in ['mine-d', 'mine-f']
         self.statistics_network = statistics_network
         self.ema_decay = ema_decay
+        self.criterion = criterion
         self.ema_denominator = None
         self.random_state = np.random.RandomState(0)
 
@@ -28,22 +31,29 @@ class MINE:
         self.random_state.shuffle(rand_indices)
         z_marg = z[rand_indices]
 
-        statistics_joint = self.statistics_network(x, z)
-        mean_statistics = torch.mean(statistics_joint)
+        T_joint = self.statistics_network(x, z)
 
-        statistics_marginal = self.statistics_network(x, z_marg)
-        denominator = torch.mean(torch.exp(statistics_marginal))
+        T_margin = self.statistics_network(x, z_marg)
 
-        # Correct biased gradient
-        if self.ema_denominator is None:
-            self.ema_denominator = denominator
+        if self.criterion == 'mine-d':
+            denominator = torch.mean(torch.exp(T_margin))
+
+            # Correct biased gradient
+            if self.ema_denominator is None:
+                self.ema_denominator = denominator
+            else:
+                self.ema_denominator = ((1.0 - self.ema_decay) * denominator +
+                                         self.ema_decay * self.ema_denominator).detach()
+
+            mean_joint = torch.mean(T_joint)
+            eMI = (mean_joint - torch.log(denominator))
+            loss = -(mean_joint -
+                     denominator / self.ema_denominator)
         else:
-            self.ema_denominator = ((1.0 - self.ema_decay) * denominator +
-                                     self.ema_decay * self.ema_denominator).detach()
+            eMI = (torch.mean(T_joint) -
+                   torch.mean(torch.exp(T_margin - 1.0)))
+            loss = -eMI
 
-        eMI = (mean_statistics - torch.log(denominator)).detach()
-        loss = -(mean_statistics -
-                 denominator / self.ema_denominator)
         return eMI, loss
 
     def estimate_on_dataset(self, loader):
