@@ -102,7 +102,7 @@ def run(args):
     true_mi = compute_true_mutual_information(
             dim, correlation)
     eMIs = np.zeros(total_steps, dtype=np.float32)
-
+    eMI_ema = None
 
     statistics_network.train()
     pbar = progressbar.ProgressBar()
@@ -126,19 +126,25 @@ def run(args):
         #eMIs[i] = mine_object.eMI_ema
         eMIs[i] = eMI
 
+        if eMI_ema is None:
+            eMI_ema = eMI
+        else:
+            eMI_ema = eMI_ema*ema_decay + (1.0 - ema_decay) * eMI
+
         optimizer.zero_grad()
         #loss = -eMI
         loss.backward()
         optimizer.step()
 
-        writer.add_scalar('eMI', eMI, i)
-        writer.add_scalar('eMI_ema', eMI, i)
-        writer.add_scalar('True_MI', true_mi, i)
+        writer.add_scalars('estimates', {'eMI' : eMI,
+                                         'true_mi' : true_mi,
+                                         'eMI_ema' : eMI_ema}, i)
+    writer.close()
 
-    plt.figure()
-    x = np.arange(total_steps)
-    y_true = true_mi * np.ones_like(eMIs)
-    plt.plot(x, y_true, 'r-', x, eMIs, 'b-')
-    plt.show()
+    #plt.figure()
+    #x = np.arange(total_steps)
+    #y_true = true_mi * np.ones_like(eMIs)
+    #plt.plot(x, y_true, 'r-', x, eMIs, 'b-')
+    #plt.show()
 
 
