@@ -10,26 +10,7 @@ from torch.utils.tensorboard import SummaryWriter
 
 from mine import MINE
 from torchutils.logging import hyperparameter_string
-
-class StatisticsNetwork(nn.Module):
-    def __init__(self, input_dim1, input_dim2, hidden_units):
-        super().__init__()
-        self.input_dim1 = input_dim1
-        self.input_dim2 = input_dim2
-        self.hidden_units = hidden_units
-
-        self.activation = nn.SELU()
-        self.layer1 = nn.Linear(input_dim1 + input_dim2, hidden_units)
-        self.layer2 = nn.Linear(hidden_units, hidden_units)
-        self.head = nn.Linear(hidden_units, 1)
-
-    def forward(self, x, y):
-        #h = self.activation(self.layer1(x)) + self.activation(self.layer2(x))
-        h = torch.cat([x, y], axis=1)
-        h = self.activation(self.layer1(h))
-        h = self.activation(self.layer2(h))
-        output = self.head(h)
-        return output
+from two_gaussian.model import StatisticsNetwork
 
 def get_covariance_matrix(dim, correlation):
     """ Compute mutual information analytically  """
@@ -62,36 +43,41 @@ def run(args):
     device = torch.device('cuda:{}'.format(args.gpu)
                     if torch.cuda.is_available() else 'cpu')
 
-    hidden_units = 512
-    dim = 20
-    correlation = 0.9
+    dim = args.dim
+    correlation = args.correlation
+
+    hidden_units = args.hidden_units or 512
     #sigma_x, sigma_z = 1.0, 0.09
-    batch_size = 10000
-    total_steps = 50000
-    lr = 1e-3
-    weight_decay = 0.0
-    ema_decay = 0.999
-    criterion = 'mine-d'
+    batch_size = args.batch_size or 500
+    total_steps = args.steps or 100000
+    lr = args.lr or 1e-4
+    weight_decay = args.weight_decay or 0.0
+    ema_decay = args.ema_decay or 0.999
+    criterion = args.criterion or 'mine-d'
+    model_name = args.model_name or 'basic'
+    activation = args.activation or 'relu'
 
     # Define tensorboard summary writer
-    save_dir = hyperparameter_string(hidden_units=hidden_units,
-                                     dim=dim,
-                                     correlation=correlation,
-                                     batch_size=batch_size,
-                                     total_steps=total_steps,
-                                     lr=lr,
-                                     weight_decay=weight_decay,
-                                     ema_decay=ema_decay,
-                                     criterion=criterion)
-    writer = SummaryWriter('./train_logs/two_gaussian/{}'.format(save_dir))
+    exp_dir = 'dim={}, correlation={}'.format(dim, correlation)
+    summary_dir = hyperparameter_string(
+                        hidden_units=hidden_units,
+                        batch_size=batch_size,
+                        lr=lr,
+                        weight_decay=weight_decay,
+                        ema_decay=ema_decay,
+                        criterion=criterion,
+                        model_name=model_name,
+                        activation=activation,
+                    )
 
     # Build modules
     statistics_network = StatisticsNetwork(
-            dim, dim, hidden_units)
+            dim, dim, hidden_units, model_name, activation)
     statistics_network.to(device)
 
-    optimizer = optim.Adam(statistics_network.parameters(),
-                           lr=lr)
+    optimizer = optim.RMSprop(statistics_network.parameters(),
+                              lr=lr,
+                              weight_decay=weight_decay)
 
     mine_object = MINE(statistics_network,
                        criterion,
@@ -104,6 +90,9 @@ def run(args):
     eMIs = np.zeros(total_steps, dtype=np.float32)
     eMI_ema = None
 
+    print('true_mi: {:.3f}'.format(true_mi))
+
+    writer = SummaryWriter('./train_logs/two_gaussian/{}/{}'.format(exp_dir, summary_dir))
     statistics_network.train()
     pbar = progressbar.ProgressBar()
     for i in pbar(range(total_steps)):
@@ -136,9 +125,13 @@ def run(args):
         loss.backward()
         optimizer.step()
 
-        writer.add_scalars('estimates', {'eMI' : eMI,
-                                         'true_mi' : true_mi,
-                                         'eMI_ema' : eMI_ema}, i)
+        if torch.isnan(eMI):
+            raise RuntimeError('eMI produces NaN')
+
+        writer.add_scalar('eMI', eMI, i)
+        writer.add_scalar('eMI_ema', eMI_ema, i)
+        writer.flush()
+
     writer.close()
 
     #plt.figure()

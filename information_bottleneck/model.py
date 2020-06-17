@@ -32,33 +32,42 @@ class GaussianAdditiveNoise(nn.Module):
 class StatisticsNetwork(nn.Module):
     def __init__(self,
                  name,
-                 bottleneck_dim):
+                 bottleneck_dim,
+                 noise='none'):
         super().__init__()
 
         self.name = name
         if name  == 'mnist':
             self.input_dim = 784
             self.bottleneck_dim = bottleneck_dim
-            self.activation = nn.SELU()
+            self.activation = nn.ELU()
 
-            self.layer1 = nn.Sequential(
-                    GaussianAdditiveNoise(std=0.3),
-                    nn.Linear(self.input_dim + bottleneck_dim, 512)
-                )
-            self.layer2 = nn.Sequential(
-                    GaussianAdditiveNoise(std=0.5),
-                    nn.Linear(512, 512)
-                )
-            self.head = nn.Sequential(
-                    GaussianAdditiveNoise(std=0.5),
-                    nn.Linear(512, 1)
-                )
+            if noise == 'additive':
+                self.add_noise_layer = GaussianAdditiveNoise(std=0.3)
+                self.layer1 = nn.Sequential(
+                        nn.Linear(self.input_dim + bottleneck_dim, 512)
+                    )
+                self.layer2 = nn.Sequential(
+                        #GaussianAdditiveNoise(std=0.5),
+                        nn.Linear(512, 512)
+                    )
+                self.head = nn.Sequential(
+                        #GaussianAdditiveNoise(std=0.5),
+                        nn.Linear(512, 1)
+                    )
+            elif noise == 'none':
+                self.layer1 = nn.Linear(self.input_dim + bottleneck_dim, 512)
+                self.layer2 = nn.Linear(512, 512)
+                self.head = nn.Linear(512, 1)
+            else:
+                raise NotImplementedError('Invalid value for noise argument: {}'.format(noise))
         else:
             raise NotImplementedError('Unknown dataset name passed.')
 
     def forward(self, x, y):
         output = None
         if self.name == 'mnist':
+            y = self.add_noise_layer(y)
             h = torch.cat([x, y], axis=1)
             h = self.activation(self.layer1(h))
             h = self.activation(self.layer2(h))
@@ -75,7 +84,7 @@ class Classifier(nn.Module):
 
         self.name = name
         self.activation = nn.ReLU()
-        if name == 'mnist_mine':
+        if name in ['mnist_mine', 'mnist_base']:
             assert bottleneck_dim is not None
 
             self.input_dim = 784
@@ -94,26 +103,26 @@ class Classifier(nn.Module):
 
             # Initialize weights
             self.apply(weight_init_fn)
-        elif name == 'mnist_base':
-            self.input_dim = 784
-            self.output_dim = 10
+        #elif name == 'mnist_base':
+        #    self.input_dim = 784
+        #    self.output_dim = 10
 
-            # Define layers
-            self.encoder = nn.Sequential(
-                        nn.Linear(self.input_dim, 1024),
-                        self.activation,
-                        nn.Linear(1024, 1024),
-                    )
-            self.classifier = nn.Linear(1024, self.output_dim)
+        #    # Define layers
+        #    self.encoder = nn.Sequential(
+        #                nn.Linear(self.input_dim, 1024),
+        #                self.activation,
+        #                nn.Linear(1024, 1024),
+        #            )
+        #    self.classifier = nn.Linear(1024, self.output_dim)
 
-            # Weight initialization
-            self.apply(weight_init_fn)
+        #    # Weight initialization
+        #    self.apply(weight_init_fn)
         else:
             raise NotImplementedError('Unknown dataset name passed.')
 
     def forward(self, x):
         bottleneck = self.encoder(x)
-        output = self.classifier(self.activation(bottleneck))
+        output = self.classifier(bottleneck)
         return output, bottleneck
 
 

@@ -6,6 +6,6 @@ def hyperparameter_string(**hyperparams):
     for k, v in hyperparams.items():
         token = str(k) + '=' + str(v)
         tokens.append(token)
-    hstring = '_'.join(tokens)
+    hstring = ', '.join(tokens)
     return hstring
 
